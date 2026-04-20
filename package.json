@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node --experimental-sqlite node_modules/.bin/next build",
     "start": "node --experimental-sqlite node_modules/.bin/next start",
     "lint": "next lint"
   },
