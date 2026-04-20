@@ -5,7 +5,7 @@ services:
     region: oregon
     plan: free
     buildCommand: npm install --include=dev && npm run build
-    startCommand: npm start
+    startCommand: node --experimental-sqlite node_modules/.bin/next start
     envVars:
       - key: NODE_VERSION
         value: 22

@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node --experimental-sqlite node_modules/.bin/next start",
     "lint": "next lint"
   },
   "dependencies": {
