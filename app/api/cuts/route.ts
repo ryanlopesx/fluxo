@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { gerarPlanoCuts } from '@/lib/cuts'
 import { dbCuts, dbRoteiros } from '@/lib/db'

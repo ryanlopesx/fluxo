@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { dbProjetos } from '@/lib/db'
 import { nanoid } from 'nanoid'

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { buscarEstatisticas, dbRoteiros, dbProjetos } from '@/lib/db'
 import DashboardClient from './DashboardClient'
 

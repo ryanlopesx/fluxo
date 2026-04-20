@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { buscarTrending, buscarPorHashtag, buscarReelsDePerfil, instagramConfigurado } from '@/lib/instagram'
 
