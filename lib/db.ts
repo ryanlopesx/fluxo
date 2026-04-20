@@ -10,14 +10,28 @@ const v = (val: unknown): SQLInputValue => val as SQLInputValue
 // Singleton que sobrevive ao HMR em desenvolvimento
 const globalForDb = global as typeof global & { db?: DatabaseSync }
 
-function criarBanco(): DatabaseSync {
-  // DATA_DIR env var allows persistent disk on Render (/var/data)
-  const dataDir = process.env.DATA_DIR || path.join(process.cwd(), 'data')
+function resolveDataDir(): string {
+  const candidates = [
+    process.env.DATA_DIR,
+    path.join(process.cwd(), 'data'),
+    '/tmp/fluxo-data',
+  ].filter(Boolean) as string[]
 
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true })
+  for (const dir of candidates) {
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      // verify writable
+      fs.accessSync(dir, fs.constants.W_OK)
+      return dir
+    } catch {
+      // try next candidate
+    }
   }
+  throw new Error('No writable directory found for SQLite database')
+}
 
+function criarBanco(): DatabaseSync {
+  const dataDir = resolveDataDir()
   const db = new DatabaseSync(path.join(dataDir, 'fluxo.db'))
 
   db.exec(`
