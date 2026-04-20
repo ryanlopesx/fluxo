@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:       #0D0D0D;
+  --surface:  #131313;
+  --raised:   #1A1A1A;
+  --overlay:  #212121;
+  --line:     #2A2A2A;
+  --line-2:   #373737;
+  --ink:      #EFEFEF;
+  --ink-2:    #9A9A9A;
+  --ink-3:    #555555;
+  --green:    #1DB954;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { color-scheme: dark; scroll-behavior: smooth; }
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+
+/* Selection */
+::selection {
+  background-color: rgba(29, 185, 84, 0.2);
+  color: var(--ink);
+}
+
+/* Shimmer skeleton */
+.shimmer {
+  background: linear-gradient(90deg, var(--raised) 25%, var(--overlay) 50%, var(--raised) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s linear infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Thin scrollbar for inner containers */
+.scroll-thin::-webkit-scrollbar { width: 3px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: var(--line-2); }
+
+/* Timeline segment */
+.timeline-segment { transition: background-color 0.2s ease, filter 0.2s ease; }
+.timeline-segment:hover { filter: brightness(1.4); }
+
+/* RE-HOOK pulse on viral timeline */
+@keyframes rehook-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
+.rehook-pulse { animation: rehook-pulse 2s ease-in-out infinite; }
