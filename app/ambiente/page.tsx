@@ -6,7 +6,7 @@ import {
   Camera, Upload, Zap, RotateCcw, Check, X, Lightbulb,
   Mic, Monitor, Star, ChevronDown, ChevronUp,
   Video, ScanLine, Target, Image as ImageIcon,
-  Radio, Volume2, VolumeX, Send, StopCircle,
+  Radio, Volume2, VolumeX, Send, StopCircle, MicOff,
 } from 'lucide-react'
 import PageTransition from '@/components/PageTransition'
 import Button from '@/components/ui/Button'
@@ -75,13 +75,15 @@ function ModoAoVivo() {
   const vozRef         = useRef(true)
   const historicoRef   = useRef<Mensagem[]>([])
 
-  const [cameraAtiva, setCameraAtiva] = useState(false)
-  const [sessaoAtiva, setSessaoAtiva] = useState(false)
-  const [mensagens, setMensagens]     = useState<Mensagem[]>([])
-  const [respondendo, setRespondendo] = useState(false)
-  const [voz, setVoz]                 = useState(true)
-  const [erroCam, setErroCam]         = useState('')
+  const [cameraAtiva, setCameraAtiva]   = useState(false)
+  const [sessaoAtiva, setSessaoAtiva]   = useState(false)
+  const [mensagens, setMensagens]       = useState<Mensagem[]>([])
+  const [respondendo, setRespondendo]   = useState(false)
+  const [voz, setVoz]                   = useState(true)
+  const [erroCam, setErroCam]           = useState('')
   const [intervaloSeg, setIntervaloSeg] = useState(15)
+  const [ouvindo, setOuvindo]           = useState(false)
+  const [transcricao, setTranscricao]   = useState('')
 
   // Mantém refs sincronizados
   useEffect(() => { vozRef.current = voz }, [voz])
@@ -136,18 +138,45 @@ function ModoAoVivo() {
     return c.toDataURL('image/jpeg', 0.7)
   }
 
+  // Remove markdown da resposta
+  const limparTexto = (t: string) =>
+    t.replace(/\*\*?(.*?)\*\*?/g, '$1')
+     .replace(/#{1,6}\s*/g, '')
+     .replace(/^\s*[-•]\s*/gm, '')
+     .replace(/`([^`]+)`/g, '$1')
+     .replace(/\n{3,}/g, '\n\n')
+     .trim()
+
   const falar = (texto: string) => {
     if (!vozRef.current || typeof window === 'undefined') return
     window.speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(texto)
-    u.lang = 'pt-BR'; u.rate = 1.05; u.pitch = 1.0
-    const vozPt = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('pt'))
-    if (vozPt) u.voice = vozPt
-    window.speechSynthesis.speak(u)
+    const u = new SpeechSynthesisUtterance(limparTexto(texto))
+    u.lang = 'pt-BR'
+    u.rate = 0.95   // um pouco mais devagar — mais natural
+    u.pitch = 1.05
+    u.volume = 1
+
+    // Espera vozes carregarem se necessário
+    const definirVoz = () => {
+      const vozes = window.speechSynthesis.getVoices()
+      const preferidas = [
+        vozes.find(v => v.lang === 'pt-BR' && v.localService),
+        vozes.find(v => v.lang === 'pt-BR'),
+        vozes.find(v => v.lang.startsWith('pt')),
+      ].filter(Boolean)
+      if (preferidas[0]) u.voice = preferidas[0]!
+      window.speechSynthesis.speak(u)
+    }
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      definirVoz()
+    } else {
+      window.speechSynthesis.onvoiceschanged = definirVoz
+    }
   }
 
   // Função estável — usa refs, não depende de state
-  const analisar = useCallback(async () => {
+  const analisar = useCallback(async (mensagemUsuario = '') => {
     if (respondendoRef.current) return
     const frame = capturarFrame()
     if (!frame) return
@@ -156,9 +185,8 @@ function ModoAoVivo() {
     setRespondendo(true)
 
     const historico = historicoRef.current
-    const idx = historico.length  // índice da nova mensagem assistant
+    const idx = historico.length
 
-    // Adiciona placeholder
     const comPlaceholder = [...historico, { role: 'assistant' as const, content: '' }]
     historicoRef.current = comPlaceholder
     setMensagens([...comPlaceholder])
@@ -169,7 +197,8 @@ function ModoAoVivo() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           frame,
-          historico: historico.slice(-6).map(m => ({ role: m.role, content: m.content })),
+          mensagemUsuario,
+          historico: historico.slice(-8).map(m => ({ role: m.role, content: m.content })),
         }),
       })
 
@@ -183,21 +212,17 @@ function ModoAoVivo() {
         const { done, value } = await reader.read()
         if (done) break
         texto += decoder.decode(value, { stream: true })
+        const limpo = limparTexto(texto)
         setMensagens(prev => {
-          const u = [...prev]
-          u[idx] = { role: 'assistant', content: texto }
-          return u
+          const u = [...prev]; u[idx] = { role: 'assistant', content: limpo }; return u
         })
       }
 
-      // Salva no histórico com texto final
-      historicoRef.current = [
-        ...historico,
-        { role: 'assistant' as const, content: texto },
-      ]
-      falar(texto)
+      const final = limparTexto(texto)
+      historicoRef.current = [...historico, { role: 'assistant' as const, content: final }]
+      falar(final)
     } catch (e) {
-      const err = `Erro: ${e instanceof Error ? e.message : String(e)}`
+      const err = `Erro ao conectar: ${e instanceof Error ? e.message : String(e)}`
       setMensagens(prev => { const u = [...prev]; u[idx] = { role: 'assistant', content: err }; return u })
       historicoRef.current = [...historico, { role: 'assistant' as const, content: err }]
     } finally {
@@ -205,6 +230,45 @@ function ModoAoVivo() {
       setRespondendo(false)
     }
   }, []) // sem dependências — usa refs
+
+  // Reconhecimento de voz
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
+
+  const iniciarEscuta = useCallback(() => {
+    const SR = (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
+      || (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition
+    if (!SR) { alert('Reconhecimento de voz não suportado neste navegador. Use Chrome.'); return }
+
+    window.speechSynthesis.cancel() // para a voz antes de ouvir
+
+    const rec = new SR()
+    rec.lang = 'pt-BR'
+    rec.continuous = false
+    rec.interimResults = true
+
+    rec.onstart = () => setOuvindo(true)
+    rec.onend   = () => { setOuvindo(false); recognitionRef.current = null }
+
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      const t = Array.from(e.results).map(r => r[0].transcript).join('')
+      setTranscricao(t)
+      if (e.results[e.results.length - 1].isFinal && t.trim()) {
+        setTranscricao('')
+        analisar(t.trim())
+      }
+    }
+
+    rec.onerror = () => { setOuvindo(false); recognitionRef.current = null }
+
+    recognitionRef.current = rec
+    rec.start()
+  }, [analisar])
+
+  const pararEscuta = useCallback(() => {
+    recognitionRef.current?.stop()
+    setOuvindo(false)
+    setTranscricao('')
+  }, [])
 
   const iniciarSessao = useCallback(async () => {
     historicoRef.current = []
@@ -344,7 +408,8 @@ function ModoAoVivo() {
                 { icone: <Camera size={11} />, texto: 'Aponte a câmera para o espaço onde você grava' },
                 { icone: <Radio size={11} />, texto: 'Clique em "Iniciar sessão" — a IA vai te falar o que vê' },
                 { icone: <Volume2 size={11} />, texto: 'Ative o volume para ouvir os feedbacks em voz' },
-                { icone: <Send size={11} />, texto: 'Clique "Analisar agora" a qualquer momento para pedir feedback' },
+                { icone: <Send size={11} />, texto: 'Clique "Analisar agora" para análise imediata' },
+                { icone: <Mic size={11} />, texto: 'Clique "Falar" para conversar com o coach por voz' },
               ].map((d, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <span className="text-tofu shrink-0">{d.icone}</span>
@@ -411,14 +476,47 @@ function ModoAoVivo() {
 
         {/* Footer do chat */}
         {sessaoAtiva && (
-          <div className="px-4 py-3 border-t border-line flex items-center gap-2">
-            <div className="flex-1 text-[11px] text-ink-3">
-              {respondendo ? 'Analisando seu espaço...' : `Próxima análise em ${intervaloSeg}s`}
+          <div className="px-4 py-3 border-t border-line space-y-2">
+            {/* Transcrição em tempo real */}
+            {(ouvindo || transcricao) && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-tofu/10 border border-tofu/25">
+                {ouvindo && (
+                  <div className="flex gap-0.5 shrink-0">
+                    {[0,1,2].map(i => (
+                      <motion.div key={i} className="w-1 h-3 rounded-full bg-tofu"
+                        animate={{ scaleY: [0.4, 1, 0.4] }}
+                        transition={{ duration: 0.6, delay: i * 0.15, repeat: Infinity }} />
+                    ))}
+                  </div>
+                )}
+                <p className="text-[11px] text-tofu flex-1 leading-snug">
+                  {transcricao || 'Ouvindo...'}
+                </p>
+              </div>
+            )}
+
+            {/* Ações */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 text-[11px] text-ink-3">
+                {respondendo ? 'Analisando...' : ouvindo ? 'Fale agora...' : `Próxima análise em ${intervaloSeg}s`}
+              </div>
+              <button onClick={analisar} disabled={respondendo || ouvindo}
+                className="text-[11px] text-tofu hover:text-tofu/80 transition-colors disabled:opacity-40 flex items-center gap-1">
+                <Send size={10} /> Agora
+              </button>
+              <button
+                onClick={ouvindo ? pararEscuta : iniciarEscuta}
+                disabled={respondendo}
+                className={`flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-lg border transition-all disabled:opacity-40 ${
+                  ouvindo
+                    ? 'bg-tofu/20 border-tofu/40 text-tofu'
+                    : 'border-line text-ink-3 hover:text-ink-2 hover:border-line-2'
+                }`}
+              >
+                {ouvindo ? <MicOff size={11} /> : <Mic size={11} />}
+                {ouvindo ? 'Parar' : 'Falar'}
+              </button>
             </div>
-            <button onClick={analisar} disabled={respondendo}
-              className="text-[11px] text-tofu hover:text-tofu/80 transition-colors disabled:opacity-40 flex items-center gap-1">
-              <Send size={10} /> Agora
-            </button>
           </div>
         )}
       </div>

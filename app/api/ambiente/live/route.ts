@@ -3,21 +3,23 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const cliente = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const SYSTEM = `Você é um coach de produção de vídeo ao vivo, especialista em Reels e conteúdo vertical.
+const SYSTEM = `Você é um coach de produção de vídeo, especialista em Reels. Estou te mostrando meu espaço de gravação pela câmera ao vivo.
 
-Estou mostrando meu espaço de gravação em tempo real pela câmera. Analise o que você vê e converse comigo diretamente, como um coach presente na sala.
+Converse comigo de forma natural e direta, como um amigo que entende de produção. Sem formalidade.
 
-Regras:
-- Fale de forma direta, curta e prática (máximo 4 frases por resposta)
-- Comece sempre pelo problema mais urgente que você vê AGORA
-- Use linguagem conversacional, não formal
-- Se o espaço melhorou em relação à última análise, reconheça
-- Dê UMA ação concreta por vez
-- Não repita o que já disse nas mensagens anteriores`
+Regras absolutas:
+- Máximo 3 frases por resposta. Seja objetivo.
+- Nunca use asteriscos, hashtags, negrito, markdown ou listas com traços. Escreva texto puro.
+- Fale na segunda pessoa, como se estivesse na sala comigo.
+- Comece pelo problema mais urgente que você vê agora.
+- Se eu fizer uma pergunta, responda ela diretamente primeiro.
+- Se o ambiente melhorou, reconheça antes de sugerir o próximo passo.
+- Uma ação por vez. Não sobrecarregue.
+- Tom: descontraído mas preciso. Como um colega experiente.`
 
 export async function POST(req: Request) {
   try {
-    const { frame, historico = [] } = await req.json()
+    const { frame, historico = [], mensagemUsuario = '' } = await req.json()
 
     if (!frame) return new Response('Frame obrigatório', { status: 400 })
 
@@ -45,9 +47,11 @@ export async function POST(req: Request) {
         },
         {
           type: 'text',
-          text: historico.length === 0
-            ? 'Olá! Estou mostrando meu espaço de gravação. O que você vê? Por onde devo começar a melhorar?'
-            : 'Aqui está como está agora. O que acha? Melhorei alguma coisa?',
+          text: mensagemUsuario
+            ? mensagemUsuario
+            : historico.length === 0
+            ? 'Olá! Estou mostrando meu espaço de gravação. O que você vê? Por onde começo?'
+            : 'Aqui está como está agora. Melhorei alguma coisa?',
         },
       ],
     })
