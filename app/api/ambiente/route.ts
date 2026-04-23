@@ -63,6 +63,43 @@ Retorne APENAS um JSON válido com esta estrutura exata:
   "prioridades": ["<ação mais urgente>", "<segunda prioridade>", "<terceira>"]
 }`
 
+function parseJsonRobusto(raw: string): unknown {
+  // 1. Tenta parse direto
+  try { return JSON.parse(raw) } catch { /* continua */ }
+
+  // 2. Remove caracteres de controle dentro de strings e trailing commas
+  const limpo = raw
+    .replace(/[\x00-\x1F\x7F]/g, (c) => {
+      if (c === '\n') return '\\n'
+      if (c === '\r') return '\\r'
+      if (c === '\t') return '\\t'
+      return ''
+    })
+    .replace(/,(\s*[}\]])/g, '$1') // trailing commas
+
+  try { return JSON.parse(limpo) } catch { /* continua */ }
+
+  // 3. Fecha colchetes/chaves faltando (JSON truncado por max_tokens)
+  const contarAbertos = (s: string, open: string, close: string) =>
+    [...s].reduce((n, c) => c === open ? n + 1 : c === close ? n - 1 : n, 0)
+
+  let recuperado = limpo
+  const faltaChaves   = contarAbertos(recuperado, '{', '}')
+  const faltaColchete = contarAbertos(recuperado, '[', ']')
+
+  // Fecha arrays e objetos pendentes
+  if (faltaColchete > 0 || faltaChaves > 0) {
+    // Remove última vírgula pendente antes de fechar
+    recuperado = recuperado.replace(/,\s*$/, '')
+    recuperado += ']'.repeat(Math.max(0, faltaColchete))
+    recuperado += '}'.repeat(Math.max(0, faltaChaves))
+  }
+
+  try { return JSON.parse(recuperado) } catch (e) {
+    throw new Error(`JSON inválido mesmo após correção: ${e}`)
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const { imagem, tipo } = await req.json()
@@ -79,7 +116,7 @@ export async function POST(req: Request) {
 
     const resposta = await cliente.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 4000,
       messages: [{
         role: 'user',
         content: [
@@ -98,10 +135,12 @@ export async function POST(req: Request) {
     })
 
     const texto = resposta.content[0].type === 'text' ? resposta.content[0].text : ''
+
+    // Extrai o bloco JSON — tenta encontrar o maior objeto possível
     const jsonMatch = texto.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('Resposta inválida da IA')
 
-    const analise = JSON.parse(jsonMatch[0])
+    const analise = parseJsonRobusto(jsonMatch[0])
     return NextResponse.json({ data: analise })
   } catch (erro) {
     console.error('[POST /api/ambiente]', erro)
