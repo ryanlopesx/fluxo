@@ -140,11 +140,14 @@ function ModoAoVivo() {
 
   // Remove markdown da resposta
   const limparTexto = (t: string) =>
-    t.replace(/\*\*?(.*?)\*\*?/g, '$1')
-     .replace(/#{1,6}\s*/g, '')
-     .replace(/^\s*[-•]\s*/gm, '')
-     .replace(/`([^`]+)`/g, '$1')
+    t.replace(/\*\*([^*\n]+)\*\*/g, '$1')   // **negrito**
+     .replace(/\*([^*\n]+)\*/g, '$1')        // *itálico*
+     .replace(/_{1,2}([^_\n]+)_{1,2}/g, '$1') // __sublinhado__
+     .replace(/#{1,6}\s+/g, '')              // # títulos
+     .replace(/^[-*•]\s+/gm, '')             // - listas
+     .replace(/`([^`]+)`/g, '$1')            // `código`
      .replace(/\n{3,}/g, '\n\n')
+     .replace(/💪|🎯|✅|❌|⚠️|💡|📌/g, '') // remove emojis de ênfase
      .trim()
 
   const falar = (texto: string) => {
@@ -152,19 +155,20 @@ function ModoAoVivo() {
     window.speechSynthesis.cancel()
     const u = new SpeechSynthesisUtterance(limparTexto(texto))
     u.lang = 'pt-BR'
-    u.rate = 0.95   // um pouco mais devagar — mais natural
-    u.pitch = 1.05
+    u.rate = 0.92
+    u.pitch = 1.0
     u.volume = 1
 
-    // Espera vozes carregarem se necessário
     const definirVoz = () => {
       const vozes = window.speechSynthesis.getVoices()
-      const preferidas = [
-        vozes.find(v => v.lang === 'pt-BR' && v.localService),
-        vozes.find(v => v.lang === 'pt-BR'),
-        vozes.find(v => v.lang.startsWith('pt')),
-      ].filter(Boolean)
-      if (preferidas[0]) u.voice = preferidas[0]!
+      // Prioridade: Google pt-BR (Chrome) → voz feminina local → qualquer pt-BR
+      const voz =
+        vozes.find(v => v.name.toLowerCase().includes('google') && v.lang === 'pt-BR') ||
+        vozes.find(v => v.lang === 'pt-BR' && /luciana|vitoria|francisca/i.test(v.name)) ||
+        vozes.find(v => v.lang === 'pt-BR' && v.localService) ||
+        vozes.find(v => v.lang === 'pt-BR') ||
+        vozes.find(v => v.lang.startsWith('pt'))
+      if (voz) u.voice = voz
       window.speechSynthesis.speak(u)
     }
 
