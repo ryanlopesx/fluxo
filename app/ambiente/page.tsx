@@ -234,16 +234,18 @@ function ModoAoVivo() {
   }, []) // sem dependências — usa refs
 
   // Reconhecimento de voz
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
 
   const iniciarEscuta = useCallback(() => {
-    const SR = (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition
-      || (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SR) { alert('Reconhecimento de voz não suportado neste navegador. Use Chrome.'); return }
 
-    window.speechSynthesis.cancel() // para a voz antes de ouvir
+    window.speechSynthesis.cancel()
 
-    const rec = new SR()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec = new SR() as any
     rec.lang = 'pt-BR'
     rec.continuous = false
     rec.interimResults = true
@@ -251,8 +253,9 @@ function ModoAoVivo() {
     rec.onstart = () => setOuvindo(true)
     rec.onend   = () => { setOuvindo(false); recognitionRef.current = null }
 
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      const t = Array.from(e.results).map(r => r[0].transcript).join('')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      const t = Array.from(e.results).map((r: any) => r[0].transcript).join('')
       setTranscricao(t)
       if (e.results[e.results.length - 1].isFinal && t.trim()) {
         setTranscricao('')
@@ -367,7 +370,7 @@ function ModoAoVivo() {
                 </Button>
               ) : (
                 <>
-                  <Button variante="secondary" tamanho="sm" icone={<Send size={12} />} onClick={analisar} carregando={respondendo}>
+                  <Button variante="secondary" tamanho="sm" icone={<Send size={12} />} onClick={() => analisar()} carregando={respondendo}>
                     Analisar agora
                   </Button>
                   <Button variante="danger" tamanho="sm" icone={<StopCircle size={12} />} onClick={pararSessao}>
@@ -502,7 +505,7 @@ function ModoAoVivo() {
               <div className="flex-1 text-[11px] text-ink-3">
                 {respondendo ? 'Analisando...' : ouvindo ? 'Fale agora...' : `Próxima análise em ${intervaloSeg}s`}
               </div>
-              <button onClick={analisar} disabled={respondendo || ouvindo}
+              <button onClick={() => analisar()} disabled={respondendo || ouvindo}
                 className="text-[11px] text-tofu hover:text-tofu/80 transition-colors disabled:opacity-40 flex items-center gap-1">
                 <Send size={10} /> Agora
               </button>
