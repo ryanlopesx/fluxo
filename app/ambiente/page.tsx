@@ -91,6 +91,16 @@ function ModoAoVivo() {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
   }, [mensagens])
 
+  // Conecta o stream ao video element sempre que o stream ou o elemento mudar
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || !streamRef.current) return
+    if (v.srcObject !== streamRef.current) {
+      v.srcObject = streamRef.current
+      v.play().catch(() => {/* autoplay bloqueado — ok, user vai interagir */})
+    }
+  }, [cameraAtiva]) // roda após setCameraAtiva(true) montar o elemento
+
   const abrirCamera = async () => {
     setErroCam('')
     try {
@@ -99,11 +109,7 @@ function ModoAoVivo() {
         audio: false,
       })
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-      setCameraAtiva(true)
+      setCameraAtiva(true) // monta o <video>, o useEffect acima conecta o stream
     } catch (e) {
       setErroCam(`Câmera indisponível: ${e instanceof Error ? e.message : 'verifique as permissões'}`)
     }
