@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, FolderKanban, BookOpen, Scissors,
-  CheckSquare, Menu, X, Zap,
+  CheckSquare, Menu, X, Zap, ScanLine,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -14,6 +14,7 @@ const navItems = [
   { href: '/',          icone: LayoutDashboard, label: 'Dashboard',   desc: 'Visão geral' },
   { href: '/projects',  icone: FolderKanban,    label: 'Projetos',    desc: 'Seus produtos' },
   { href: '/library',   icone: BookOpen,         label: 'Biblioteca',  desc: 'Todos roteiros' },
+  { href: '/ambiente',  icone: ScanLine,         label: 'Ambiente',    desc: 'Análise de setup' },
   { href: '/cuts',      icone: Scissors,         label: 'Cortador',    desc: 'Plano de edição' },
   { href: '/checklist', icone: CheckSquare,      label: 'Checklist',   desc: '10 pontos' },
 ]
