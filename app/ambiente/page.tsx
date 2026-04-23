@@ -65,21 +65,28 @@ function SecaoCard({ titulo, nota, icone, children, defaultOpen = false }: { tit
 
 /* ─── Modo Ao Vivo ───────────────────────────────────────────── */
 function ModoAoVivo() {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const chatRef = useRef<HTMLDivElement>(null)
+  const videoRef    = useRef<HTMLVideoElement>(null)
+  const canvasRef   = useRef<HTMLCanvasElement>(null)
+  const streamRef   = useRef<MediaStream | null>(null)
+  const chatRef     = useRef<HTMLDivElement>(null)
   const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Refs para evitar stale closures no intervalo
+  const respondendoRef = useRef(false)
+  const vozRef         = useRef(true)
+  const historicoRef   = useRef<Mensagem[]>([])
 
   const [cameraAtiva, setCameraAtiva] = useState(false)
   const [sessaoAtiva, setSessaoAtiva] = useState(false)
-  const [mensagens, setMensagens] = useState<Mensagem[]>([])
+  const [mensagens, setMensagens]     = useState<Mensagem[]>([])
   const [respondendo, setRespondendo] = useState(false)
-  const [voz, setVoz] = useState(true)
-  const [erroCam, setErroCam] = useState('')
+  const [voz, setVoz]                 = useState(true)
+  const [erroCam, setErroCam]         = useState('')
   const [intervaloSeg, setIntervaloSeg] = useState(15)
 
-  // Scroll automático no chat
+  // Mantém refs sincronizados
+  useEffect(() => { vozRef.current = voz }, [voz])
+
+  // Scroll automático
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
   }, [mensagens])
@@ -88,61 +95,67 @@ function ModoAoVivo() {
     setErroCam('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
       })
       streamRef.current = stream
-      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play() }
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
       setCameraAtiva(true)
-    } catch {
-      setErroCam('Não foi possível acessar a câmera. Verifique as permissões.')
+    } catch (e) {
+      setErroCam(`Câmera indisponível: ${e instanceof Error ? e.message : 'verifique as permissões'}`)
     }
   }
 
   const fecharCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
+    if (videoRef.current) { videoRef.current.srcObject = null }
     setCameraAtiva(false)
     setSessaoAtiva(false)
     if (intervaloRef.current) clearInterval(intervaloRef.current)
+    intervaloRef.current = null
   }, [])
 
   const capturarFrame = (): string | null => {
-    if (!videoRef.current || !canvasRef.current) return null
     const v = videoRef.current
     const c = canvasRef.current
-    c.width = Math.min(v.videoWidth, 800)
-    c.height = Math.round(c.width * (v.videoHeight / v.videoWidth))
-    c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
+    if (!v || !c || v.readyState < 2 || v.videoWidth === 0) return null
+    const w = Math.min(v.videoWidth, 800)
+    const h = Math.round(w * (v.videoHeight / v.videoWidth))
+    c.width = w; c.height = h
+    c.getContext('2d')?.drawImage(v, 0, 0, w, h)
     return c.toDataURL('image/jpeg', 0.7)
   }
 
   const falar = (texto: string) => {
-    if (!voz || typeof window === 'undefined') return
+    if (!vozRef.current || typeof window === 'undefined') return
     window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(texto)
-    utterance.lang = 'pt-BR'
-    utterance.rate = 1.05
-    utterance.pitch = 1.0
-    // Prefere voz em português se disponível
-    const vozes = window.speechSynthesis.getVoices()
-    const vozPt = vozes.find(v => v.lang.startsWith('pt'))
-    if (vozPt) utterance.voice = vozPt
-    window.speechSynthesis.speak(utterance)
+    const u = new SpeechSynthesisUtterance(texto)
+    u.lang = 'pt-BR'; u.rate = 1.05; u.pitch = 1.0
+    const vozPt = window.speechSynthesis.getVoices().find(v => v.lang.startsWith('pt'))
+    if (vozPt) u.voice = vozPt
+    window.speechSynthesis.speak(u)
   }
 
-  const analisarFrame = useCallback(async (historico: Mensagem[]) => {
+  // Função estável — usa refs, não depende de state
+  const analisar = useCallback(async () => {
+    if (respondendoRef.current) return
     const frame = capturarFrame()
-    if (!frame || respondendo) return
+    if (!frame) return
 
+    respondendoRef.current = true
     setRespondendo(true)
 
-    // Adiciona mensagem do user (invisível no chat, só para contexto)
-    const novasMensagens: Mensagem[] = [...historico, { role: 'user', content: '', frame }]
+    const historico = historicoRef.current
+    const idx = historico.length  // índice da nova mensagem assistant
 
-    // Placeholder da resposta
-    const idxResposta = novasMensagens.length
-    novasMensagens.push({ role: 'assistant', content: '' })
-    setMensagens([...novasMensagens])
+    // Adiciona placeholder
+    const comPlaceholder = [...historico, { role: 'assistant' as const, content: '' }]
+    historicoRef.current = comPlaceholder
+    setMensagens([...comPlaceholder])
 
     try {
       const resp = await fetch('/api/ambiente/live', {
@@ -154,72 +167,56 @@ function ModoAoVivo() {
         }),
       })
 
-      if (!resp.ok || !resp.body) throw new Error('Erro na API')
+      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`)
 
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
-      let textoCompleto = ''
+      let texto = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        textoCompleto += chunk
+        texto += decoder.decode(value, { stream: true })
         setMensagens(prev => {
-          const updated = [...prev]
-          updated[idxResposta] = { role: 'assistant', content: textoCompleto }
-          return updated
+          const u = [...prev]
+          u[idx] = { role: 'assistant', content: texto }
+          return u
         })
       }
 
-      falar(textoCompleto)
-      return [...novasMensagens.slice(0, idxResposta), { role: 'assistant' as const, content: textoCompleto }]
+      // Salva no histórico com texto final
+      historicoRef.current = [
+        ...historico,
+        { role: 'assistant' as const, content: texto },
+      ]
+      falar(texto)
     } catch (e) {
-      const erroMsg = 'Erro ao analisar. Tentando novamente...'
-      setMensagens(prev => {
-        const updated = [...prev]
-        updated[idxResposta] = { role: 'assistant', content: erroMsg }
-        return updated
-      })
+      const err = `Erro: ${e instanceof Error ? e.message : String(e)}`
+      setMensagens(prev => { const u = [...prev]; u[idx] = { role: 'assistant', content: err }; return u })
+      historicoRef.current = [...historico, { role: 'assistant' as const, content: err }]
     } finally {
+      respondendoRef.current = false
       setRespondendo(false)
     }
-    return novasMensagens
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [respondendo, voz])
+  }, []) // sem dependências — usa refs
 
-  const iniciarSessao = async () => {
-    setSessaoAtiva(true)
+  const iniciarSessao = useCallback(async () => {
+    historicoRef.current = []
     setMensagens([])
-    window.speechSynthesis.cancel()
+    setSessaoAtiva(true)
+    window.speechSynthesis?.cancel()
 
-    // Primeira análise imediata
-    const hist: Mensagem[] = []
-    const resultado = await analisarFrame(hist)
-    const novoHist = resultado ?? hist
+    await analisar()
 
-    // Intervalo automático
-    intervaloRef.current = setInterval(async () => {
-      setMensagens(prev => {
-        analisarFrame(prev.filter(m => m.role === 'assistant' && m.content))
-        return prev
-      })
+    intervaloRef.current = setInterval(() => {
+      analisar() // sempre usa a versão mais recente via refs
     }, intervaloSeg * 1000)
-
-    return () => { if (intervaloRef.current) clearInterval(intervaloRef.current) }
-  }
+  }, [analisar, intervaloSeg])
 
   const pararSessao = () => {
     setSessaoAtiva(false)
-    if (intervaloRef.current) clearInterval(intervaloRef.current)
-    window.speechSynthesis.cancel()
-  }
-
-  const analisarAgora = () => {
-    setMensagens(prev => {
-      analisarFrame(prev.filter(m => m.content))
-      return prev
-    })
+    if (intervaloRef.current) { clearInterval(intervaloRef.current); intervaloRef.current = null }
+    window.speechSynthesis?.cancel()
   }
 
   useEffect(() => () => { fecharCamera(); window.speechSynthesis?.cancel() }, [fecharCamera])
@@ -298,7 +295,7 @@ function ModoAoVivo() {
                 </Button>
               ) : (
                 <>
-                  <Button variante="secondary" tamanho="sm" icone={<Send size={12} />} onClick={analisarAgora} carregando={respondendo}>
+                  <Button variante="secondary" tamanho="sm" icone={<Send size={12} />} onClick={analisar} carregando={respondendo}>
                     Analisar agora
                   </Button>
                   <Button variante="danger" tamanho="sm" icone={<StopCircle size={12} />} onClick={pararSessao}>
@@ -412,7 +409,7 @@ function ModoAoVivo() {
             <div className="flex-1 text-[11px] text-ink-3">
               {respondendo ? 'Analisando seu espaço...' : `Próxima análise em ${intervaloSeg}s`}
             </div>
-            <button onClick={analisarAgora} disabled={respondendo}
+            <button onClick={analisar} disabled={respondendo}
               className="text-[11px] text-tofu hover:text-tofu/80 transition-colors disabled:opacity-40 flex items-center gap-1">
               <Send size={10} /> Agora
             </button>
