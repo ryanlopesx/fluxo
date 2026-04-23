@@ -11,10 +11,9 @@ interface StatsCardProps {
   descricao?: string
   delay?: number
   sufixo?: string
-  tendencia?: number
 }
 
-function useCountUp(valor: number, duracao = 1200) {
+function useCountUp(valor: number, duracao = 1000) {
   const [atual, setAtual] = useState(0)
   const rafRef = useRef<number | null>(null)
 
@@ -33,51 +32,38 @@ function useCountUp(valor: number, duracao = 1200) {
   return atual
 }
 
-export default function StatsCard({ titulo, valor, icone, cor, descricao, delay = 0, sufixo = '', tendencia }: StatsCardProps) {
+export default function StatsCard({ titulo, valor, icone, cor, descricao, delay = 0, sufixo = '' }: StatsCardProps) {
   const valorAnimado = useCountUp(valor)
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.35 }}
-      style={{ borderLeftColor: cor, borderLeftWidth: 3 }}
-      className="bg-surface border border-line rounded p-4"
+      transition={{ delay, duration: 0.3 }}
+      className="bg-surface border border-line rounded-lg p-5 relative overflow-hidden"
     >
-      <div className="flex items-start justify-between mb-3">
-        <p className="text-[11px] font-mono text-ink-3 uppercase tracking-wider">{titulo}</p>
+      {/* Top accent bar */}
+      <div className="absolute top-0 left-0 right-0 h-[2px]" style={{ backgroundColor: cor, opacity: 0.6 }} />
+
+      <div className="flex items-start justify-between mb-4">
+        <p className="text-xs font-medium text-ink-3 uppercase tracking-wider">{titulo}</p>
         <div
-          style={{ color: cor, backgroundColor: `${cor}12`, borderColor: `${cor}20` }}
-          className="w-7 h-7 rounded border flex items-center justify-center shrink-0"
+          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ color: cor, backgroundColor: `${cor}15`, border: `1px solid ${cor}25` }}
         >
           {icone}
         </div>
       </div>
 
-      <div className="flex items-end gap-2">
-        <span className="text-3xl font-semibold text-ink leading-none tabular-nums">
+      <div className="flex items-baseline gap-1">
+        <span className="text-4xl font-bold text-ink leading-none tabular-nums tracking-tight">
           {valorAnimado}{sufixo}
         </span>
-        {tendencia !== undefined && tendencia !== 0 && (
-          <span className={`text-xs font-mono mb-0.5 ${tendencia > 0 ? 'text-green' : 'text-danger'}`}>
-            {tendencia > 0 ? '+' : ''}{tendencia}%
-          </span>
-        )}
       </div>
 
       {descricao && (
-        <p className="text-xs text-ink-3 mt-2 leading-relaxed">{descricao}</p>
+        <p className="text-[11px] text-ink-3 mt-2">{descricao}</p>
       )}
-
-      <div className="mt-3 h-px bg-line overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: valor > 0 ? '100%' : '0%' }}
-          transition={{ delay: delay + 0.3, duration: 0.8, ease: 'easeOut' }}
-          style={{ backgroundColor: cor }}
-          className="h-full"
-        />
-      </div>
     </motion.div>
   )
 }
