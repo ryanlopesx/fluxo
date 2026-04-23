@@ -4,13 +4,15 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: npm install --include=dev && node --experimental-sqlite node_modules/.bin/next build
-    startCommand: node --experimental-sqlite node_modules/.bin/next start
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_VERSION
         value: 22
       - key: NODE_ENV
         value: production
+      - key: NODE_OPTIONS
+        value: --experimental-sqlite
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: GNEWS_API_KEY
