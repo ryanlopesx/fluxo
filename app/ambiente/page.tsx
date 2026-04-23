@@ -138,16 +138,14 @@ function ModoAoVivo() {
     return c.toDataURL('image/jpeg', 0.7)
   }
 
-  // Remove markdown da resposta
+  // Remove markdown da resposta — strip direto, sem tentar casar pares
   const limparTexto = (t: string) =>
-    t.replace(/\*\*([^*\n]+)\*\*/g, '$1')   // **negrito**
-     .replace(/\*([^*\n]+)\*/g, '$1')        // *itálico*
-     .replace(/_{1,2}([^_\n]+)_{1,2}/g, '$1') // __sublinhado__
-     .replace(/#{1,6}\s+/g, '')              // # títulos
-     .replace(/^[-*•]\s+/gm, '')             // - listas
-     .replace(/`([^`]+)`/g, '$1')            // `código`
+    t.replace(/\*/g, '')          // todos os asteriscos
+     .replace(/_/g, '')           // todos os underlines
+     .replace(/^#+\s*/gm, '')     // # títulos
+     .replace(/^-\s+/gm, '')      // - listas no início de linha
+     .replace(/`/g, '')           // backticks
      .replace(/\n{3,}/g, '\n\n')
-     .replace(/💪|🎯|✅|❌|⚠️|💡|📌/g, '') // remove emojis de ênfase
      .trim()
 
   const falar = (texto: string) => {

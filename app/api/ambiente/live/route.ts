@@ -68,11 +68,14 @@ export async function POST(req: Request) {
 
     const encoder = new TextEncoder()
 
+    const limpar = (t: string) =>
+      t.replace(/\*/g, '').replace(/_/g, '').replace(/^#+\s*/gm, '').replace(/^-\s+/gm, '').replace(/`/g, '')
+
     const readable = new ReadableStream({
       async start(controller) {
         for await (const event of stream) {
           if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            controller.enqueue(encoder.encode(event.delta.text))
+            controller.enqueue(encoder.encode(limpar(event.delta.text)))
           }
         }
         controller.close()
